@@ -69,8 +69,10 @@ const processFile = (libDir, filename) => {
 };
 
 const build = (cwd) => {
-  const { order } = require(path.resolve(cwd, 'build.json'));
-  const { name } = require(path.resolve(cwd, 'package.json'));
+  const buildJsonPath = path.resolve(cwd, 'build.json');
+  const packageJsonPath = path.resolve(cwd, 'package.json');
+  const { order } = require(buildJsonPath);
+  const { name } = require(packageJsonPath);
   const packageName = name.split('/').pop();
   const outputFile = path.join(cwd, `${packageName}.mjs`);
   const libDir = path.join(cwd, 'lib');
@@ -87,7 +89,8 @@ const build = (cwd) => {
   let output = '';
   if (externals.size > 0) {
     for (const [pkg, names] of externals) {
-      output += `import { ${[...names].join(', ')} } from './${pkg}.js';\n`;
+      const named = [...names].join(', ');
+      output += `import { ${named} } from './${pkg}.js';\n`;
     }
     output += '\n';
   }
@@ -116,7 +119,8 @@ const link = (cwd, targetPath) => {
   const packageDirs = [];
   for (const name of fs.readdirSync(nodeModulesDir)) {
     const full = path.join(nodeModulesDir, name);
-    if (name.startsWith('@') && fs.statSync(full).isDirectory()) {
+    const isScoped = name.startsWith('@') && fs.statSync(full).isDirectory();
+    if (isScoped) {
       for (const sub of fs.readdirSync(full)) {
         packageDirs.push(path.join(full, sub));
       }
@@ -129,7 +133,8 @@ const link = (cwd, targetPath) => {
     if (!fs.existsSync(buildJsonPath)) continue;
     let packageName;
     try {
-      const pkgJson = require(path.resolve(pkgDir, 'package.json'));
+      const pkgJsonPath = path.resolve(pkgDir, 'package.json');
+      const pkgJson = require(pkgJsonPath);
       packageName = pkgJson.name.split('/').pop();
     } catch {
       continue;
@@ -143,8 +148,10 @@ const link = (cwd, targetPath) => {
     const linkName = `${packageName}.js`;
     const linkPath = path.join(targetDir, linkName);
     if (fs.existsSync(linkPath)) fs.unlinkSync(linkPath);
-    fs.symlinkSync(path.resolve(sourceFile), linkPath);
-    console.log(`Linked: ${linkName} -> ${path.relative(cwd, sourceFile)}`);
+    const absoluteSource = path.resolve(sourceFile);
+    fs.symlinkSync(absoluteSource, linkPath);
+    const relativeSource = path.relative(cwd, sourceFile);
+    console.log(`Linked: ${linkName} -> ${relativeSource}`);
   }
 };
 
@@ -153,7 +160,8 @@ const main = () => {
   const mode = process.argv[2];
   try {
     if (mode === 'link') {
-      const targetPath = process.argv[3] || './application/static';
+      const defaultTarget = './application/static';
+      const targetPath = process.argv[3] || defaultTarget;
       link(cwd, targetPath);
     } else {
       build(cwd);
